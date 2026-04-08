@@ -69,50 +69,44 @@ window.DropiApp.Fields.Location = {
     },
 
     async selectFirstSuggestion(input) {
-        console.log('[DropiLocation] Intentando clickear la primera sugerencia con selector preciso...');
+        console.log('[DropiLocation] Iniciando búsqueda en lista de sugerencias...');
         if (input) input.focus();
 
-        // 1. Intentar encontrar el SPAN de "Ciudad" o "Provincia"
-        try {
-            const xpath = "//span[text()='Ciudad' or text()='Provincia' or text()='Estado']";
-            const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-            const spanNode = result.singleNodeValue;
+        // 1. REINTENTOS: El menú de Facebook puede tardar unos ms en ser "clicable"
+        for (let i = 0; i < 10; i++) {
+            // Buscamos la lista y la primera opción según tu HTML
+            const list = document.querySelector('ul[role="listbox"]');
+            const firstOption = list ? list.querySelector('li[role="option"]') : null;
 
-            if (spanNode && spanNode.offsetParent !== null) {
-                console.log('[DropiLocation] 🎯 "Ciudad" detectada. Buscando contenedor principal...');
+            if (firstOption) {
+                console.log('[DropiLocation] ✅ Lista detectada. Clickeando primera opción...');
+                
+                // Asegurar visibilidad
+                firstOption.scrollIntoView({ block: 'nearest' });
+                
+                // Clic Progresivo (Varios métodos para asegurar React)
+                firstOption.click();
+                const innerClickable = firstOption.querySelector('div[role="none"]') || firstOption.querySelector('div');
+                if (innerClickable) innerClickable.click();
 
-                // Basado en tu HTML, el contenedor clicable es un div con clases como x1n2onr6 o x1ja2u2z
-                // Subimos hasta encontrar el div que engloba toda la sugerencia
-                const container = spanNode.closest('.x1n2onr6') || 
-                                  spanNode.closest('.x1ja2u2z') || 
-                                  spanNode.parentElement.parentElement.parentElement.parentElement;
-
-                if (container) {
-                    console.log('[DropiLocation] ✅ Contenedor encontrado. Clickeando...');
-                    container.scrollIntoView({ block: 'center' });
-                    await new Promise(r => setTimeout(r, 200));
-
-                    // Click TRIPLE para asegurar (Simulado, Nativo y MouseEvent)
-                    container.click();
-                    container.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                    container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-                    
-                    return true;
+                // PEQUÉÑA ESPERA para que FB procese el clic
+                await new Promise(r => setTimeout(r, 500));
+                
+                // Si después del clic sigue habiendo error, usamos el teclado como martillo final
+                const stillError = document.querySelector('input[aria-invalid="true"][aria-label="Ubicación"]');
+                if (stillError) {
+                    console.log('[DropiLocation] ⌨️ Clic no bastó. Usando Enter de teclado...');
+                    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
                 }
+
+                return true;
             }
-        } catch (e) {
-            console.warn('[DropiLocation] Error en buscador de sugerencia:', e);
+
+            // Esperar 300ms antes del siguiente reintento
+            await new Promise(r => setTimeout(r, 300));
         }
 
-        // Fallback: Si no lo encuentra por SPAN, buscamos cualquier botón dentro del menú desplegable x1n2onr6
-        const anyButton = document.querySelector('.x1n2onr6 div[role="button"]') || document.querySelector('.x1n2onr6 .x1ja2u2z');
-        if (anyButton) {
-            console.log('[DropiLocation] Fallback: Clickeando primer botón del menú detectado.');
-            anyButton.click();
-            return true;
-        }
-
-        console.warn('[DropiLocation] ❌ No se pudo confirmar la sugerencia automáticamente.');
+        console.warn('[DropiLocation] ❌ No se encontró la lista de sugerencias tras 3 segundos.');
         return false;
     }
 };
