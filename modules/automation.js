@@ -137,255 +137,194 @@ window.DropiApp.Automation = {
             window.DropiApp.AutoLoop.isProcessing = true;
         }
 
-        console.log('[DropiAuto] Iniciando llenado INTELIGENTE...');
+        try {
+            console.log('[DropiAuto] Iniciando llenado INTELIGENTE...');
 
-        // 🛡️ MÓDULO DE SEGURIDAD (PolicyGuard)
-        if (window.DropiApp.PolicyGuard) {
-            const securityCheck = await window.DropiApp.PolicyGuard.checkProduct(product);
-            if (!securityCheck.safe) {
-                console.error(`⛔ PRODUCTO BLOQUEADO POR POLÍTICAS FB: ${securityCheck.reason}. Saltando al siguiente...`);
+            // 🛡️ MÓDULO DE SEGURIDAD (PolicyGuard)
+            if (window.DropiApp.PolicyGuard) {
+                const securityCheck = await window.DropiApp.PolicyGuard.checkProduct(product);
+                if (!securityCheck.safe) {
+                    console.error(`⛔ PRODUCTO BLOQUEADO POR POLÍTICAS FB: ${securityCheck.reason}. Saltando al siguiente...`);
 
-                // LOGICA DE SALTO INTELIGENTE (Auto-Skip) - ACTIVA
-                const nextBtn = this.getUiElement('dropi-next-btn'); // SHADOW DOM FIX
-                if (nextBtn) {
-                    console.log('[DropiAuto] ⏭️ Saltando producto prohibido...');
+                    // LOGICA DE SALTO INTELIGENTE (Auto-Skip) - ACTIVA
+                    const nextBtn = this.getUiElement('dropi-next-btn'); 
+                    if (nextBtn) {
+                        console.log('[DropiAuto] ⏭️ Saltando producto prohibido...');
+                        nextBtn.click();
 
-                    // 1. Liberar semáforo del intento actual
-                    window.DROPI_IS_FILLING = false;
-                    if (window.DropiApp.AutoLoop) window.DropiApp.AutoLoop.isProcessing = false;
-
-                    // 2. Avanzamos de producto
-                    nextBtn.click();
-
-                    // 3. Reiniciamos llenado en 4 segundos
-                    setTimeout(() => {
-                        const fillBtn = this.getUiElement('dropi-fill-btn'); // SHADOW DOM FIX
-                        if (fillBtn) {
-                            console.log('[DropiAuto] 🔄 Reintentando con nuevo producto...');
-                            fillBtn.click();
-                        }
-                    }, 4000);
+                        // Reiniciamos llenado en 4 segundos
+                        setTimeout(() => {
+                            const fillBtn = this.getUiElement('dropi-fill-btn'); 
+                            if (fillBtn) {
+                                console.log('[DropiAuto] 🔄 Reintentando con nuevo producto...');
+                                fillBtn.click();
+                            }
+                        }, 4000);
+                    }
+                    return; // DETENER este intento fallido
                 }
-                return; // DETENER este intento fallido
             }
-        }
 
-        // 1. Imágenes
-        let injected = this.injectImagesInstant();
-        if (!injected && product.images?.length > 0) {
-            await this.prepareImages(product.images);
-            injected = this.injectImagesInstant();
-        }
-
-        if (!injected) {
-            const addPhotoBtn = this.findAddPhotoButton();
-            if (addPhotoBtn) {
-                if (typeof addPhotoBtn.click === 'function') {
-                    addPhotoBtn.click();
-                } else {
-                    addPhotoBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-                }
-                await new Promise(r => setTimeout(r, 1000));
+            // 1. Imágenes (Lógica de IMAGEN ÚNICA ROTATIVA)
+            if (product.images && product.images.length > 0) {
+                console.log(`[DropiAuto] 📸 Modo imagen única: Usando 1 de ${product.images.length} disponibles.`);
+                
+                // Seleccionamos la primera de la lista
+                const currentImage = product.images[0];
+                
+                // Preparamos E INYECTAMOS solo esa imagen
+                await this.prepareImages([currentImage]);
                 this.injectImagesInstant();
-            }
-        }
 
-        await new Promise(r => setTimeout(r, 1000));
-
-        // 3. Título
-        let finalTitle = product.title || '';
-
-        // REGLA OBLIGATORIA: Agregar sufijo de pago contraentrega (si se desea, pero el usuario dijo 'unicamente desde inputs')
-        // Vamos a respetar lo que esté en el input.
-        const suffix = "";
-        const maxTotalLength = 100;
-        const maxTitleLength = maxTotalLength - suffix.length;
-
-        if (finalTitle.length > maxTitleLength) {
-            let trimmed = finalTitle.substring(0, maxTitleLength);
-            const lastSpace = trimmed.lastIndexOf(' ');
-            if (lastSpace > 0) trimmed = trimmed.substring(0, lastSpace);
-            finalTitle = trimmed;
-        }
-
-        await this.smartFill('Título', finalTitle, this.USER_IDS.title);
-
-        // 3.2 Estado
-        if (window.DropiApp.Fields && window.DropiApp.Fields.Condition) {
-            await window.DropiApp.Fields.Condition.set("Nuevo");
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        // 4. Precio
-        let finalPrice = product.providerPrice || product.suggestedPrice || 0;
-        await this.smartFill('Precio', String(finalPrice), this.USER_IDS.price);
-
-        // 5. Expandir "Más detalles"
-        await new Promise(r => setTimeout(r, 1000));
-        await this.expandMoreDetails();
-
-        // 6. Descripción
-        let finalDescription = product.description || '';
-        await this.smartFill('Descripción', finalDescription, this.USER_IDS.description);
-
-        // 7. Etiquetas
-        if (window.DropiApp.Fields && window.DropiApp.Fields.Tags) {
-            let combinedTags = product.tags || [];
-
-            // REGLA ESTRICTA 2025: MÁXIMO 20 TAGS (Facebook permite hasta 20)
-            if (combinedTags.length > 20) {
-                combinedTags = combinedTags.slice(0, 20);
-            }
-
-            await window.DropiApp.Fields.Tags.set(combinedTags);
-        }
-
-        // 8. Preferencias de Entrega
-        if (window.DropiApp.Fields && window.DropiApp.Fields.Delivery) {
-            await window.DropiApp.Fields.Delivery.set();
-        }
-
-        // 8.5 SELECCIÓN DE CATEGORÍA
-        let finalCategory = product.category;
-        if (window.DropiApp.Fields && window.DropiApp.Fields.Category && finalCategory) {
-            await window.DropiApp.Fields.Category.set(finalCategory);
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        // 9. UBICACIÓN (CON ROTACIÓN)
-        if (window.DropiApp.Fields && window.DropiApp.Fields.Location && product.locations && product.locations.length > 0) {
-            // Tomamos la primera ubicación
-            const targetLocation = product.locations[0]; 
-            console.log(`[DropiAuto] 📍 Usando ubicación rotativa: ${targetLocation}`);
-            
-            await window.DropiApp.Fields.Location.set(targetLocation);
-            
-            // ROTACIÓN: Movemos la ubicación usada al final de la lista para la próxima vez
-            product.locations.push(product.locations.shift());
-            window.DropiApp.State.save(); // Persistir rotación
-            
-            await new Promise(r => setTimeout(r, 500));
-        }
-
-        console.log('[DropiAuto] 🏁 Formulario completo. Avanzando...');
-
-        // 9. CLICK EN SIGUIENTE (Con Auto-Reparación)
-        await new Promise(r => setTimeout(r, 1000));
-
-        try {
-            // Función helper para buscar el botón
-            const findNextBtn = () => document.evaluate(
-                "//div[@role='button' and @aria-label='Siguiente']",
-                document,
-                null,
-                XPathResult.FIRST_ORDERED_NODE_TYPE,
-                null
-            ).singleNodeValue;
-
-            let nextBtn = findNextBtn();
-
-            // --- LÓGICA DE RECUPERACIÓN ---
-            if (!nextBtn) {
-                console.warn('[DropiAuto] ⚠️ Botón "Siguiente" no visible. Posible error de categoría. Reparando...');
-
-                // Intento 1: Re-aplicar la categoría que traíamos (IA o JSON)
-                if (finalCategory) {
-                    console.log(`[DropiAuto] 🔄 Reintentando poner categoría: "${finalCategory}"`);
-                    await window.DropiApp.Fields.Category.set(finalCategory);
-                    await new Promise(r => setTimeout(r, 1500)); // Esperar a que UI reaccione
-                    nextBtn = findNextBtn();
-                }
-
-                // Intento 2: Si sigue fallando, usar "Hogar" (Comodín)
-                if (!nextBtn) {
-                    console.warn('[DropiAuto] ⚠️ Falló la categoría original. Aplicando fallback de emergencia: "Hogar"');
-                    await window.DropiApp.Fields.Category.set("Hogar");
-                    await new Promise(r => setTimeout(r, 1500));
-                    nextBtn = findNextBtn();
+                // 🔄 ROTACIÓN: Movemos la imagen usada al final para que la próxima vez se use la siguiente
+                if (product.images.length > 1) {
+                    product.images.push(product.images.shift());
+                    window.DropiApp.State.save(); // Persistir el nuevo orden
+                    console.log('[DropiAuto] 🔄 Imagen rotada para el próximo post.');
                 }
             }
-            // ------------------------------
 
-            if (nextBtn) {
-                nextBtn.scrollIntoView({ block: 'center', inline: 'nearest' });
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 3. Título
+            let finalTitle = product.title || '';
+            const suffix = "";
+            const maxTotalLength = 100;
+            const maxTitleLength = maxTotalLength - suffix.length;
+
+            if (finalTitle.length > maxTitleLength) {
+                let trimmed = finalTitle.substring(0, maxTitleLength);
+                const lastSpace = trimmed.lastIndexOf(' ');
+                if (lastSpace > 0) trimmed = trimmed.substring(0, lastSpace);
+                finalTitle = trimmed;
+            }
+
+            await this.smartFill('Título', finalTitle, this.USER_IDS.title);
+
+            // 3.2 Estado
+            if (window.DropiApp.Fields && window.DropiApp.Fields.Condition) {
+                await window.DropiApp.Fields.Condition.set("Nuevo");
                 await new Promise(r => setTimeout(r, 500));
-
-                nextBtn.click();
-                console.log('[DropiAuto] ✅ Click en "Siguiente" realizado.');
-            } else {
-                console.error('[DropiAuto] ❌ Botón "Siguiente" no apareció ni con fallback. Revisión manual requerida.');
             }
-        } catch (e) {
-            console.error('[DropiAuto] Error al dar click en Siguiente:', e);
-        }
 
-        // 10. CLICK EN PUBLICAR
-        console.log('[DropiAuto] Esperando a botón Publicar...');
-        // Esperamos la transición (puede tardar unos segundos)
-        await new Promise(r => setTimeout(r, 4000)); // Aumentado levemente para seguridad
+            // 4. Precio
+            let finalPrice = product.providerPrice || product.suggestedPrice || 0;
+            await this.smartFill('Precio', String(finalPrice), this.USER_IDS.price);
 
-        try {
-            let publishBtn = null;
-            // Intentos para encontrar el botón (máximo 5 segundos extra)
-            for (let i = 0; i < 5; i++) {
-                publishBtn = document.evaluate(
-                    "//div[@role='button' and @aria-label='Publicar']",
-                    document,
-                    null,
-                    XPathResult.FIRST_ORDERED_NODE_TYPE,
-                    null
+            // 5. Expandir "Más detalles"
+            await new Promise(r => setTimeout(r, 1000));
+            await this.expandMoreDetails();
+
+            // 6. Descripción
+            let finalDescription = product.description || '';
+            await this.smartFill('Descripción', finalDescription, this.USER_IDS.description);
+
+            // 7. Etiquetas
+            if (window.DropiApp.Fields && window.DropiApp.Fields.Tags) {
+                let combinedTags = product.tags || [];
+                if (combinedTags.length > 20) combinedTags = combinedTags.slice(0, 20);
+                await window.DropiApp.Fields.Tags.set(combinedTags);
+            }
+
+            // 8. Preferencias de Entrega
+            if (window.DropiApp.Fields && window.DropiApp.Fields.Delivery) {
+                await window.DropiApp.Fields.Delivery.set();
+            }
+
+            // 8.5 SELECCIÓN DE CATEGORÍA
+            let finalCategory = product.category;
+            if (window.DropiApp.Fields && window.DropiApp.Fields.Category && finalCategory) {
+                await window.DropiApp.Fields.Category.set(finalCategory);
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            // 9. UBICACIÓN (CON ROTACIÓN)
+            if (window.DropiApp.Fields && window.DropiApp.Fields.Location && product.locations && product.locations.length > 0) {
+                const targetLocation = product.locations[0]; 
+                console.log(`[DropiAuto] 📍 Usando ubicación rotativa: ${targetLocation}`);
+                await window.DropiApp.Fields.Location.set(targetLocation);
+                product.locations.push(product.locations.shift());
+                window.DropiApp.State.save(); 
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            console.log('[DropiAuto] 🏁 Formulario completo. Avanzando...');
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 9. CLICK EN SIGUIENTE
+            try {
+                const findNextBtn = () => document.evaluate(
+                    "//div[@role='button' and @aria-label='Siguiente']",
+                    document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
                 ).singleNodeValue;
 
-                if (publishBtn) break;
+                let nextBtn = findNextBtn();
+                if (!nextBtn) {
+                    console.warn('[DropiAuto] ⚠️ Botón "Siguiente" no visible. Reparando...');
+                    if (finalCategory) {
+                        await window.DropiApp.Fields.Category.set(finalCategory);
+                        await new Promise(r => setTimeout(r, 1500));
+                        nextBtn = findNextBtn();
+                    }
+                    if (!nextBtn) {
+                        await window.DropiApp.Fields.Category.set("Hogar");
+                        await new Promise(r => setTimeout(r, 1500));
+                        nextBtn = findNextBtn();
+                    }
+                }
+
+                if (nextBtn) {
+                    nextBtn.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    await new Promise(r => setTimeout(r, 500));
+                    nextBtn.click();
+                    console.log('[DropiAuto] ✅ Click en "Siguiente" realizado.');
+                }
+            } catch (e) { console.error('[DropiAuto] Error en Siguiente:', e); }
+
+            // 10. CLICK EN PUBLICAR
+            await new Promise(r => setTimeout(r, 4000));
+            try {
+                let publishBtn = null;
+                for (let i = 0; i < 5; i++) {
+                    publishBtn = document.evaluate(
+                        "//div[@role='button' and @aria-label='Publicar']",
+                        document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null
+                    ).singleNodeValue;
+                    if (publishBtn) break;
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+
+                if (publishBtn) {
+                    publishBtn.scrollIntoView({ block: 'center', inline: 'nearest' });
+                    await new Promise(r => setTimeout(r, 800));
+                    publishBtn.click();
+                    console.log('[DropiAuto] 🚀 ¡PUBLICADO EXITOSAMENTE!');
+                }
+            } catch (e) { console.error('[DropiAuto] Error en Publicar:', e); }
+
+            // 11. REDIRECCIÓN AUTO-CICLO
+            console.log('[DropiAuto] ⏳ Monitoreando cambio de URL (Máx 30s)...');
+            for (let i = 0; i < 30; i++) {
                 await new Promise(r => setTimeout(r, 1000));
+                if (window.location.href.includes('/marketplace/you/selling')) {
+                    console.log('[DropiAuto] 🔄 Éxito detectado! Redirigiendo...');
+                    localStorage.setItem('dropi_loop_step', 'next');
+                    window.location.href = 'https://www.facebook.com/marketplace/create/item';
+                    return; 
+                }
             }
+            console.warn('[DropiAuto] ⚠️ Tiempo agotado para redirección.');
 
-            if (publishBtn) {
-                // Scroll suave y espera
-                publishBtn.scrollIntoView({ block: 'center', inline: 'nearest' });
-                await new Promise(r => setTimeout(r, 800));
-
-                // CLICK ÚNICO y SEGURO
-                // Se eliminó el dispatchEvent consecutivo que enviaba una segunda señal
-                publishBtn.click();
-
-                console.log('[DropiAuto] 🚀 ¡PUBLICADO EXITOSAMENTE! (Click único)');
-            } else {
-                console.warn('[DropiAuto] ⚠️ Botón "Publicar" no encontrado tras espera.');
-            }
         } catch (e) {
-            console.error('[DropiAuto] Error Global en Automatización:', e);
-
-            // 🔓 DESBLOQUEO DE EMERGENCIA
+            console.error('[DropiAuto] ❌ ERROR CRÍTICO EN AUTOMATIZACIÓN:', e);
+        } finally {
+            // 🔓 SIEMPRE LIBERAR SEMÁFOROS AL FINAL
             window.DROPI_IS_FILLING = false;
-
             if (window.DropiApp.AutoLoop) {
-                console.log('[DropiAuto] 🔓 Desbloqueando AutoLoop por error...');
+                console.log('[DropiAuto] 🔓 Liberando AutoLoop (Finally).');
                 window.DropiApp.AutoLoop.isProcessing = false;
             }
         }
-
-        // 11. REDIRECCIÓN AUTO-CICLO (MONITOREO ACTIVO)
-        console.log('[DropiAuto] ⏳ Monitoreando cambio de URL para autoredirección (Máx 30s)...');
-
-        // Intentamos detectar el cambio de URL durante 30 segundos
-        for (let i = 0; i < 30; i++) {
-            await new Promise(r => setTimeout(r, 1000)); // Chequeo cada 1 segundo
-
-            if (window.location.href.includes('/marketplace/you/selling')) {
-                console.log('[DropiAuto] 🔄 ¡Éxito detectado! Redirigiendo a crear nuevo producto...');
-
-                // 🔓 LIBERAR SEMÁFORO DEL BUCLE
-                window.DROPI_IS_FILLING = false;
-                localStorage.setItem('dropi_loop_step', 'next');
-
-                window.location.href = 'https://www.facebook.com/marketplace/create/item';
-                return; // Terminamos aquí
-            }
-        }
-
-        console.warn('[DropiAuto] ⚠️ Tiempo agotado. No se detectó redirección a "/selling".');
-        console.log('[DropiAuto] Finalizado.');
     },
 
     async expandMoreDetails() {

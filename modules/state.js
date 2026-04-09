@@ -80,6 +80,42 @@ window.DropiApp.State = {
         return false;
     },
 
+    deleteProduct() {
+        if (this.products.length === 0) return;
+        
+        // Confirmar eliminación (Opcional, pero recomendado)
+        if (!confirm('¿Estás seguro de que deseas eliminar este producto?')) return;
+
+        this.products.splice(this.currentIndex, 1);
+        
+        // Ajustar índice si el producto eliminado era el último
+        if (this.currentIndex >= this.products.length) {
+            this.currentIndex = Math.max(0, this.products.length - 1);
+        }
+
+        // Si borramos todos, creamos uno vacío por defecto
+        if (this.products.length === 0) {
+            this.products = [{
+                title: '',
+                description: '',
+                providerPrice: '',
+                suggestedPrice: '',
+                category: '',
+                locations: [],
+                images: [],
+                tags: []
+            }];
+            this.currentIndex = 0;
+        }
+
+        // 🔓 SEGURIDAD: Reset de bloqueos si el usuario borra manualmente
+        window.DROPI_IS_FILLING = false;
+        if (window.DropiApp.AutoLoop) window.DropiApp.AutoLoop.isProcessing = false;
+
+        this.save();
+        return true;
+    },
+
     hasProducts() {
         return this.products.length > 0;
     }

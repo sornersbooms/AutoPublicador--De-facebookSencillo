@@ -1,0 +1,13 @@
+{
+  "name": "facebook-marketplace-auto-publisher-obfuscated",
+  "version": "4.0.0",
+  "description": "Auto-publisher with obfuscated source code",
+  "main": "background.js",
+  "scripts": {
+    "build": "node obfuscate.js"
+  },
+  "devDependencies": {
+    "fs-extra": "^11.3.4",
+    "javascript-obfuscator": "^4.2.2"
+  }
+}

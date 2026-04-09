@@ -24,6 +24,7 @@ window.DropiApp.UI = {
         loop: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
         tag: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
         plus: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+        trash: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>',
         globe: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
         stop: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>',
         play: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
@@ -86,7 +87,7 @@ window.DropiApp.UI = {
                 <div id="dropi-header">
                     <div class="dropi-brand">
                         <span class="dropi-logo-icon" style="color:#4ade80;">${this.Icons.logo}</span>
-                        <h1 id="dropi-title">MarketMoneyPost</h1>
+                        <h1 id="dropi-title">AutoPublicador Marketplace</h1>
                         <div id="dropi-expire-warning" class="expire-warning" style="display:none;">⚠️ Expira en 3 días</div>
                     </div>
                     <div class="dropi-window-controls">
@@ -114,10 +115,11 @@ window.DropiApp.UI = {
                         <div id="dropi-product-form" class="dropi-section" style="padding: 15px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-light); border-radius: 12px; display: flex; flex-direction: column; gap: 10px;">
                             
                             <!-- Counter & Nav -->
-                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
+                            <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 5px;">
                                 <button id="dropi-prev-btn" class="dropi-nav-btn">${this.Icons.prev}</button>
                                 <div id="dropi-counter" class="dropi-counter-badge" style="font-size: 11px;">1 / 1</div>
                                 <button id="dropi-next-btn" class="dropi-nav-btn">${this.Icons.next}</button>
+                                <button id="dropi-delete-btn" class="dropi-nav-btn" style="color: #ef4444;" title="Eliminar producto">${this.Icons.trash}</button>
                             </div>
 
                             <div class="input-group">
@@ -139,11 +141,27 @@ window.DropiApp.UI = {
                                             <option value="Herramientas" style="background: #0f172a; color: white;">Herramientas</option>
                                             <option value="Muebles" style="background: #0f172a; color: white;">Muebles</option>
                                             <option value="Hogar" style="background: #0f172a; color: white;">Hogar</option>
+                                            <option value="Jardinería" style="background: #0f172a; color: white;">Jardinería</option>
                                             <option value="Electrodomésticos" style="background: #0f172a; color: white;">Electrodomésticos</option>
-                                            <option value="Jardín" style="background: #0f172a; color: white;">Jardín</option>
-                                            <option value="Ropa y accesorios" style="background: #0f172a; color: white;">Ropa y accesorios</option>
+                                            <option value="Videojuegos" style="background: #0f172a; color: white;">Videojuegos</option>
+                                            <option value="Libros, películas y música" style="background: #0f172a; color: white;">Libros, películas y música</option>
+                                            <option value="Bolsos y equipaje" style="background: #0f172a; color: white;">Bolsos y equipaje</option>
+                                            <option value="Ropa y calzado de mujer" style="background: #0f172a; color: white;">Ropa y calzado de mujer</option>
+                                            <option value="Ropa y calzado de hombre" style="background: #0f172a; color: white;">Ropa y calzado de hombre</option>
+                                            <option value="Joyas y accesorios" style="background: #0f172a; color: white;">Joyas y accesorios</option>
                                             <option value="Salud y belleza" style="background: #0f172a; color: white;">Salud y belleza</option>
-                                            <option value="Electrónica" style="background: #0f172a; color: white;">Electrónica</option>
+                                            <option value="Productos para mascotas" style="background: #0f172a; color: white;">Productos para mascotas</option>
+                                            <option value="Bebés y niños" style="background: #0f172a; color: white;">Bebés y niños</option>
+                                            <option value="Juguetes y juegos" style="background: #0f172a; color: white;">Juguetes y juegos</option>
+                                            <option value="Electrónica e informática" style="background: #0f172a; color: white;">Electrónica e informática</option>
+                                            <option value="Teléfonos celulares" style="background: #0f172a; color: white;">Teléfonos celulares</option>
+                                            <option value="Bicicletas" style="background: #0f172a; color: white;">Bicicletas</option>
+                                            <option value="Arte y manualidades" style="background: #0f172a; color: white;">Arte y manualidades</option>
+                                            <option value="Deportes y actividades al aire libre" style="background: #0f172a; color: white;">Deportes y actividades al aire libre</option>
+                                            <option value="Autopartes" style="background: #0f172a; color: white;">Autopartes</option>
+                                            <option value="Instrumentos musicales" style="background: #0f172a; color: white;">Instrumentos musicales</option>
+                                            <option value="Antigüedades y artículos de colección" style="background: #0f172a; color: white;">Antigüedades y artículos de colección</option>
+                                            <option value="Venta de garaje" style="background: #0f172a; color: white;">Venta de garaje</option>
                                             <option value="Varios" style="background: #0f172a; color: white;">Varios</option>
                                             `}
                                         </select>
@@ -534,6 +552,20 @@ window.DropiApp.UI = {
             });
         }
 
+        // --- FIX: Prevent Facebook from stealing 'q', '@' and other keys ---
+        const stopKeyProp = (e) => {
+            e.stopPropagation();
+            // No hacemos preventDefault para que el carácter SE escriba en el input, 
+            // pero sí evitamos que Facebook lo detecte como un atajo de teclado.
+        };
+
+        const allInputs = this.shadowRoot.querySelectorAll('input, textarea');
+        allInputs.forEach(input => {
+            input.addEventListener('keydown', stopKeyProp);
+            input.addEventListener('keypress', stopKeyProp);
+            input.addEventListener('keyup', stopKeyProp);
+        });
+
         // --- TABS ---
         const tabs = $$('.dropi-tab');
         tabs.forEach(tab => {
@@ -563,6 +595,9 @@ window.DropiApp.UI = {
         });
         $('dropi-next-btn').addEventListener('click', () => {
             if (window.DropiApp.State.navigate(1)) this.render();
+        });
+        $('dropi-delete-btn').addEventListener('click', () => {
+            if (window.DropiApp.State.deleteProduct()) this.render();
         });
 
         // --- BUCLE INFINITO LISTENER ---
@@ -676,6 +711,7 @@ window.DropiApp.UI = {
         const locInput = $('dropi-input-location');
         if (locInput) {
             locInput.addEventListener('keydown', (e) => {
+                e.stopPropagation(); // Asegurar que FB no robe la tecla
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     const val = locInput.value.trim();
