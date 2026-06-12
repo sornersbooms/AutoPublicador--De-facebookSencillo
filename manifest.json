@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Facebook Marketplace Auto-Publisher",
+    "name": "AutoPost Marketplace",
     "version": "4.0",
-    "description": "Herramienta de automatización modular PRO para publicar y extraer en Facebook Marketplace.",
+    "description": "Publica tus productos en Facebook Marketplace de forma más rápida y organizada, con ayuda de IA.",
     "icons": {
         "16": "icon.png",
         "48": "icon.png",
@@ -15,7 +15,10 @@
     ],
     "host_permissions": [
         "https://www.facebook.com/*",
-        "<all_urls>"
+        "https://app.dropi.co/*",
+        "https://api.alcanzia.co/*",
+        "https://api.groq.com/*",
+        "https://*/*"
     ],
     "background": {
         "service_worker": "background.js"
@@ -41,7 +44,8 @@
                 "modules/extras.js",
                 "modules/autoLoop.js",
                 "modules/ui.js",
-                "modules/main.js"
+                "modules/main.js",
+                "modules/supportChat.js"
             ]
         }
     ],
@@ -51,7 +55,8 @@
                 "styles.css"
             ],
             "matches": [
-                "<all_urls>"
+                "https://www.facebook.com/*",
+                "https://app.dropi.co/*"
             ]
         }
     ]

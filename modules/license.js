@@ -1,225 +1,174 @@
 window.DropiApp = window.DropiApp || {};
 /**
- * LICENSE MODULE V6 PRO (Anti-Hack + Fingerprint)
- * ------------------------------------------------
- * Maneja la validación de licencia, registro obligatorio y fingerprinting.
+ * LICENSE MODULE — Conectado al PANEL MAESTRO (Alcanzia)
+ * ------------------------------------------------------
+ * Reemplaza el backend anterior (Google Apps Script) por la API del panel.
+ * Mantiene la MISMA interfaz pública para no romper ui.js / automation.js.
  */
 window.DropiApp.License = {
-    // ⚠️ REEMPLAZA ESTO CON LA URL DE TU SCRIPT DE GOOGLE APPS ACTUALIZADO ⚠️
-    API_URL: 'https://script.google.com/macros/s/AKfycbxjprlb_4UBC0RbY8ziv-quzFt2kn3Doj1-uhX2EHsIq0eRKVfOlYh1MO5OzODh98LX/exec',
+    API_BASE: 'https://api.alcanzia.co/api',
+    EXTENSION_ID: 'autopost-marketplace',
+    EXTENSION_NAME: 'AutoPost Marketplace',
 
     state: {
         key: null,
-        plan: 'NONE', // NONE, TRIAL, PRO
+        plan: 'NONE',   // NONE | PRO
         email: null,
         daysLeft: 0,
+        expires: null,
         isValid: false,
         loading: true,
-        deviceId: null
+        deviceId: null,
+        config: null     // selectores remotos (no usados; se usan los locales)
     },
 
     async init() {
         this.state.deviceId = await this.getDeviceId();
         await this.loadFromStorage();
-        // Intentar validar en segundo plano
         this.validateCurrentLicense();
     },
 
-    // -------------------------------------------------------------
-    // 🕵️ FINGERPRINTING DE DISPOSITIVO (ANTI-CLONACIÓN)
-    // -------------------------------------------------------------
+    // ----- Huella de dispositivo (determinística, anti-clonación) -----
     async getDeviceId() {
-        // 1. Intentar recuperar memoria rápida
         const stored = await new Promise(r => chrome.storage.local.get('dropi_device_fingerprint', r));
         if (stored.dropi_device_fingerprint) return stored.dropi_device_fingerprint;
-
-        // 2. Generar nueva huella digital hardware
         try {
             const components = [
-                navigator.userAgent,
-                navigator.language,
-                screen.colorDepth,
-                new Date().getTimezoneOffset(),
-                navigator.hardwareConcurrency,
+                navigator.userAgent, navigator.language, screen.colorDepth,
+                new Date().getTimezoneOffset(), navigator.hardwareConcurrency,
                 navigator.deviceMemory || 'na'
             ];
-            // Canvas Hash (Dibuja imagen invisible y saca hash único de la GPU)
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             ctx.textBaseline = "top"; ctx.font = "14px 'Arial'";
             ctx.fillStyle = "#f60"; ctx.fillRect(125, 1, 62, 20);
             ctx.fillStyle = "#069"; ctx.fillText("MKT_HASH", 2, 15);
-            const canvasHash = canvas.toDataURL().slice(-50); // Últimos 50 chars
-
-            components.push(canvasHash);
-
+            components.push(canvas.toDataURL().slice(-50));
             const raw = components.join('||');
-            // Simple Hash
             let hash = 0;
-            for (let i = 0; i < raw.length; i++) {
-                const char = raw.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-
+            for (let i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash) + raw.charCodeAt(i); hash = hash & hash; }
             const finalId = 'DEV-' + Math.abs(hash).toString(36).toUpperCase();
             await chrome.storage.local.set({ dropi_device_fingerprint: finalId });
             return finalId;
-
         } catch (e) {
-            console.error("Fingerprint error", e);
             return 'UNK-' + Date.now();
         }
     },
 
-    // -------------------------------------------------------------
-    // 📥 CARGA & VALIDACIÓN
-    // -------------------------------------------------------------
     async loadFromStorage() {
         return new Promise(resolve => {
             chrome.storage.local.get(['dropi_license_info'], (result) => {
                 if (result.dropi_license_info) {
-                    const info = result.dropi_license_info;
-                    this.state.key = info.key;
-                    this.state.plan = info.plan;
-                    this.state.isValid = true; // Asumimos válido hasta verificar
-                    console.log('[License] Loaded cached:', info);
+                    this.state.key = result.dropi_license_info.key;
+                    this.state.plan = result.dropi_license_info.plan || 'PRO';
+                    this.state.isValid = true; // optimista hasta verificar
                 }
                 resolve();
             });
         });
     },
 
+    daysLeftFrom(expiresAt) {
+        if (!expiresAt) return 0;
+        const p = String(expiresAt).split('-');
+        if (p.length !== 3) return 0;
+        const exp = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+        const today = new Date();
+        const mid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        return Math.round((exp.getTime() - mid.getTime()) / (1000 * 60 * 60 * 24));
+    },
+
+    // ----- Validación contra el panel -----
     async validateCurrentLicense() {
         if (!this.state.key) {
             this.state.isValid = false;
-            this.triggerAuthRequired(); // No hay key -> pedir registro
+            this.triggerAuthRequired();
             return;
         }
-
         this.state.loading = true;
         try {
-            // Petición POST segura al backend
-            const response = await fetch(this.API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'validate_license',
-                    key: this.state.key,
-                    deviceId: this.state.deviceId
-                })
-            });
-            const json = await response.json();
+            const url = `${this.API_BASE}/verify?key=${encodeURIComponent(this.state.key)}&deviceId=${encodeURIComponent(this.state.deviceId)}`;
+            const res = await fetch(url);
+            const data = await res.json();
 
-            if (json.success) {
-                // Todo OK
+            if (data.valid) {
                 this.updateState({
                     isValid: true,
-                    plan: json.plan,
-                    expires: json.expires,
-                    config: json.config // Selectores remotos
+                    plan: 'PRO',
+                    email: data.email || this.state.email,
+                    expires: data.expiresAt || null,
+                    daysLeft: this.daysLeftFrom(data.expiresAt)
                 });
             } else {
-                console.warn('[License] Validation Failed:', json.reason);
-
-                // SOLO invalidamos si la razón es definitiva (No encontrada, Expirada o Mal Dispositivo)
-                // Si es un error de servidor o timeout (json.error), NO cerramos la sesión para evitar molestias.
-                const fatalReasons = ['not_found', 'expired', 'inactive', 'device_mismatch'];
-
-                if (fatalReasons.includes(json.reason)) {
-                    if (json.reason === 'device_mismatch') {
-                        alert('⚠️ ALERTA DE SEGURIDAD\nEsta licencia no pertenece a este dispositivo.\nSe cerrará la sesión por seguridad.');
-                    } else if (json.reason === 'expired') {
-                        alert('⚠️ Tu licencia ha expirado. Por favor renueva tu plan.');
-                    }
-
-                    this.invalidate(); // Borrar todo
-                    this.triggerAuthRequired();
-                } else {
-                    console.log('[License] Error temporal de servidor, manteniendo sesión activa por ahora.');
+                const msg = (data.message || '').toUpperCase();
+                if (msg.includes('OTRO DISPOSITIVO')) {
+                    alert('⚠️ ALERTA DE SEGURIDAD\nEsta licencia no pertenece a este dispositivo.\nSe cerrará la sesión por seguridad.');
+                } else if (msg.includes('EXPIRADA')) {
+                    alert('⚠️ Tu licencia ha expirado. Por favor renueva tu plan.');
                 }
+                this.invalidate();
+                this.triggerAuthRequired();
             }
         } catch (e) {
-            console.error('[License] Network fail, offline mode active');
-            // En modo offline mantenemos el estado del caché
+            // Sin conexión: mantenemos el estado del caché (modo offline)
+            console.warn('[License] Sin conexión, manteniendo sesión.');
         } finally {
             this.state.loading = false;
-            this.updateBadge(); // Actualizar UI
+            this.updateBadge();
         }
     },
 
-    // -------------------------------------------------------------
-    // ✏️ REGISTRO (TRIAL) & ACTIVACIÓN MANUAL
-    // -------------------------------------------------------------
-
+    // ----- Registro de prueba -----
     async registerTrial(email, whatsapp) {
-        // Validar WhatsApp (+Country)
         if (!whatsapp.match(/^\+\d{7,}$/)) {
             return { success: false, error: 'WhatsApp debe incluir "+" y código país (Ej: +57...)' };
         }
-
         const deviceId = await this.getDeviceId();
-
         try {
-            const response = await fetch(this.API_URL, {
+            const res = await fetch(`${this.API_BASE}/licenses/register`, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    action: 'register_trial',
-                    email: email,
-                    whatsapp: whatsapp,
-                    deviceId: deviceId
+                    email, phone: whatsapp, deviceId,
+                    extensionId: this.EXTENSION_ID, extensionName: this.EXTENSION_NAME
                 })
             });
-            const json = await response.json();
-
-            if (json.success) {
-                this.state.key = json.key;
-                this.updateState({
-                    isValid: true,
-                    plan: json.plan, // PRO (Trial)
-                    expires: json.expires
-                });
-                // Guardar persistentemente
-                chrome.storage.local.set({ dropi_license_info: { key: json.key, plan: json.plan } });
-                return { success: true, message: json.message };
-            } else {
-                return { success: false, error: json.error || 'Error en registro' };
+            const data = await res.json();
+            if (data.key) {
+                this.state.key = data.key;
+                this.updateState({ isValid: true, plan: 'PRO' });
+                chrome.storage.local.set({ dropi_license_info: { key: data.key, plan: 'PRO' } });
+                this.validateCurrentLicense();
+                return { success: true, message: '¡Prueba activada! Tienes 3 días.' };
             }
+            return { success: false, error: data.error || 'No se pudo activar la prueba' };
         } catch (e) {
             return { success: false, error: 'Error de conexión con el servidor' };
         }
     },
 
+    // ----- Activación manual de licencia -----
     async activateLicenseKey(key) {
         if (!key) return { success: false, error: 'Clave vacía' };
-        this.state.key = key; // Temporal para validar
-
-        // Simplemente llamamos a validateCurrentLicense
-        // Pero necesitamos esperar la respuesta, mejor hacer la llamada directa aquí
         const deviceId = await this.getDeviceId();
-
         try {
-            const response = await fetch(this.API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'validate_license',
-                    key: key,
-                    deviceId: deviceId
-                })
-            });
-            const json = await response.json();
-
-            if (json.success) {
+            const url = `${this.API_BASE}/verify?key=${encodeURIComponent(key)}&deviceId=${encodeURIComponent(deviceId)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.valid) {
+                this.state.key = key;
                 this.updateState({
-                    isValid: true,
-                    plan: json.plan,
-                    expires: json.expires
+                    isValid: true, plan: 'PRO', email: data.email || null,
+                    expires: data.expiresAt || null, daysLeft: this.daysLeftFrom(data.expiresAt)
                 });
-                chrome.storage.local.set({ dropi_license_info: { key: key, plan: json.plan } });
+                chrome.storage.local.set({ dropi_license_info: { key: key, plan: 'PRO' } });
                 return { success: true };
-            } else {
-                return { success: false, error: json.reason === 'device_mismatch' ? 'Licencia ya usada en otro PC' : 'Licencia Inválida' };
             }
-        } catch (e) { return { success: false, error: 'Error conexion' }; }
+            const msg = (data.message || '').toUpperCase();
+            return { success: false, error: msg.includes('OTRO DISPOSITIVO') ? 'Licencia ya usada en otro PC' : (data.message || 'Licencia inválida') };
+        } catch (e) {
+            return { success: false, error: 'Error de conexión' };
+        }
     },
 
     invalidate() {
@@ -229,15 +178,10 @@ window.DropiApp.License = {
         chrome.storage.local.remove('dropi_license_info');
     },
 
-    // -------------------------------------------------------------
-    // 🎨 UI UPDATERS
-    // -------------------------------------------------------------
-
+    // ----- UI -----
     updateState(newData) {
         Object.assign(this.state, newData);
         this.updateBadge();
-
-        // Si ya es válido, ocultamos modal si existe
         if (this.state.isValid) {
             const modal = document.getElementById('dropi-welcome-modal');
             if (modal) modal.style.display = 'none';
@@ -245,45 +189,28 @@ window.DropiApp.License = {
     },
 
     updateBadge() {
-        // Busca el badge en el UI principal (si existe, ui.js lo crea)
-        const badge = document.querySelector('.pro-badge'); // Clase en tu UI
-        const statusText = document.getElementById('license-status-text'); // ID en tu UI
-
+        const badge = document.querySelector('.pro-badge');
         if (badge) {
             badge.textContent = this.state.plan || 'OFF';
-            if (this.state.plan === 'PRO') badge.style.background = '#4ade80'; // Green
-            else if (this.state.isValid) badge.style.background = '#3b82f6'; // Blue
-            else badge.style.background = '#ef4444'; // Red
+            if (this.state.plan === 'PRO') badge.style.background = '#4ade80';
+            else if (this.state.isValid) badge.style.background = '#3b82f6';
+            else badge.style.background = '#ef4444';
         }
     },
 
     triggerAuthRequired() {
-        // Le dice al UI.js que muestre el modal de login
-        // Disparando evento personalizado
         window.dispatchEvent(new CustomEvent('DropiAuthRequired'));
     },
 
-    // -------------------------------------------------------------
-    // 📊 ESTADÍSTICAS & ANALÍTICA
-    // -------------------------------------------------------------
-    async recordAction(type, count = 1) {
+    // ----- Presencia online (antes "estadísticas") -----
+    async recordAction(_type, _count = 1) {
         if (!this.state.key || !this.state.isValid) return;
-
         try {
-            fetch(this.API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'update_stats',
-                    key: this.state.key,
-                    type: type,
-                    count: count,
-                    deviceId: this.state.deviceId
-                })
+            fetch(`${this.API_BASE}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: this.state.key })
             });
-            // No esperamos el await para no bloquear el flujo principal
-            console.log(`[License] Action recorded: ${type}`);
-        } catch (e) {
-            console.warn('[License] Failed to record action');
-        }
+        } catch (e) { /* ignore */ }
     }
 };
